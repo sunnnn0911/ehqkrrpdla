@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>교육용 도박 시뮬레이션 룰렛</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .reel {
+    width: 96px;
+    height: 96px;
+    border-radius: 12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:34px;
+    font-weight:700;
+    background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    overflow:hidden;
+    position:relative;
+  }
+  .reel-strip {
+    position:absolute;
+    top:0;
+    left:0;
+    right:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    transition:transform 0.1s linear;
+  }
+  @media (max-width: 640px) {
+    .reel { width:72px!important; height:72px!important; font-size:26px!important; }
+  }
+  .backdrop { background:rgba(0,0,0,0.6); }
+</style>
+</head>
+<body class="bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white min-h-screen flex items-center justify-center p-4">
+
+<div class="max-w-4xl w-full bg-slate-900/60 border border-slate-700 rounded-2xl p-6 shadow-2xl hidden" id="mainGame">
+  <div class="flex items-center justify-between mb-4">
+    <div id="nicknameDisplay" class="text-lg font-semibold">닉네임: <span id="nicknameText">-</span></div>
+    <div class="text-right">
+      <div class="text-sm text-slate-300">현재 보유 금액</div>
+      <div id="balanceDisplay" class="text-2xl font-extrabold">₩100,000</div>
+    </div>
+  </div>
+
+  <div class="bg-slate-800/40 border border-slate-700 p-4 rounded-lg mb-4">
+    <div class="font-bold text-lg mb-2">규칙</div>
+    <ul class="text-sm space-y-1">
+      <li>• 세 칸 모두 같은 것이 나오면 거신 금액의 두 배를 드립니다. (총 3배)</li>
+      <li>• 두 칸 성공 시 거신 금액의 10%를 드립니다. (총 1.1배)</li>
+      <li>• 모두 실패 시 거신 금액의 50%를 가져갑니다. (총 0.5배)</li>
+      <li class="text-yellow-300">※ 매 스핀마다 현재 보유 금액 전체를 걸게 됩니다.</li>
+    </ul>
+  </div>
+
+  <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+    <div class="flex items-center justify-center gap-3 flex-1">
+      <div class="reel"><div class="reel-strip" id="strip1">?</div></div>
+      <div class="reel"><div class="reel-strip" id="strip2">?</div></div>
+      <div class="reel"><div class="reel-strip" id="strip3">?</div></div>
+    </div>
+
+    <div class="w-full md:w-64 bg-slate-800/30 p-4 rounded-lg border border-slate-700">
+      <div class="mb-3 text-sm">스핀 조작</div>
+      <button id="spinBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-rose-500 to-pink-500 font-bold shadow-lg transform active:scale-95">
+        돌리기 (손잡이)
+      </button>
+      <div class="mt-3 text-xs text-slate-300">확률 기반 스핀입니다.</div>
+    </div>
+  </div>
+
+  <div class="mt-6 bg-slate-800/20 p-3 rounded-lg text-sm text-slate-300 h-32 overflow-auto" id="logBox">
+    <div class="text-slate-400">게임 로그가 여기에 표시됩니다.</div>
+  </div>
+</div>
+
+<div id="nicknameModal" class="fixed inset-0 z-50 flex items-center justify-center backdrop">
+  <div class="bg-slate-900 rounded-xl p-6 max-w-md w-full border border-slate-700">
+    <h2 class="text-xl font-bold mb-2">닉네임을 입력해 주세요</h2>
+    <input id="nicknameInput" class="w-full p-3 rounded-lg bg-slate-800 border border-slate-700 focus:outline-none" placeholder="예: 해든" />
+    <div class="mt-4 flex justify-end">
+      <button id="nickConfirm" class="px-4 py-2 rounded-lg bg-emerald-500 font-semibold">확인</button>
+    </div>
+  </div>
+</div>
+
+<div id="confirmModal" class="hidden fixed inset-0 flex items-center justify-center backdrop">
+  <div class="bg-slate-900 rounded-xl p-6 max-w-md w-full border border-slate-700">
+    <h3 class="text-lg font-bold mb-2">스핀 확인</h3>
+    <p id="confirmText" class="text-slate-300">현재 가진 금액 ₩100,000으로 룰렛을 돌리시겠습니까?</p>
+    <div class="mt-4 flex justify-end gap-2">
+      <button id="confirmCancel" class="px-4 py-2 rounded-lg bg-slate-700">취소</button>
+      <button id="confirmOk" class="px-4 py-2 rounded-lg bg-rose-500 font-semibold">확인</button>
+    </div>
+  </div>
+</div>
+
+<div id="resultModal" class="hidden fixed inset-0 flex items-center justify-center backdrop">
+  <div class="bg-slate-900 rounded-xl p-6 max-w-md w-full border border-slate-700">
+    <div id="resultTitle" class="text-xl font-bold mb-2">결과</div>
+    <div id="resultText" class="text-slate-200"></div>
+    <div class="mt-4 flex justify-end gap-2">
+      <button id="resultCancel" class="px-4 py-2 rounded-lg bg-slate-700">취소</button>
+      <button id="resultContinue" class="px-4 py-2 rounded-lg bg-emerald-500 font-semibold">계속</button>
+    </div>
+  </div>
+</div>
+
+<div id="brokeModal" class="hidden fixed inset-0 flex items-center justify-center backdrop">
+  <div class="bg-slate-900 rounded-xl p-6 max-w-md w-full border border-slate-700 text-center">
+    <h2 class="text-2xl font-bold mb-2 text-red-400">파산!</h2>
+    <p class="mb-4">도박은 위험합니다.</p>
+    <button id="brokeOk" class="px-4 py-2 rounded-lg bg-rose-500 font-semibold">확인 (새 세션 시작)</button>
+  </div>
+</div>
+
+<script>
+const SYMBOLS = ['❤','★','@','7','5','3','9','1','₩'];
+let nickname='', balance=100000, spinCount=0;
+let scriptedSequence=['JACKPOT','LOSS','SMALL','JACKPOT'];
+let consecutiveSmall=0, consecutiveLoss=0;
+
+const nicknameModal=document.getElementById('nicknameModal');
+const nicknameInput=document.getElementById('nicknameInput');
+const nickConfirm=document.getElementById('nickConfirm');
+const nicknameText=document.getElementById('nicknameText');
+const balanceDisplay=document.getElementById('balanceDisplay');
+const spinBtn=document.getElementById('spinBtn');
+const confirmModal=document.getElementById('confirmModal');
+const confirmText=document.getElementById('confirmText');
+const confirmOk=document.getElementById('confirmOk');
+const confirmCancel=document.getElementById('confirmCancel');
+const resultModal=document.getElementById('resultModal');
+const resultTitle=document.getElementById('resultTitle');
+const resultText=document.getElementById('resultText');
+const resultCancel=document.getElementById('resultCancel');
+const resultContinue=document.getElementById('resultContinue');
+const brokeModal=document.getElementById('brokeModal');
+const brokeOk=document.getElementById('brokeOk');
+const strips=[document.getElementById('strip1'),document.getElementById('strip2'),document.getElementById('strip3')];
+const logBox=document.getElementById('logBox');
+const mainGame=document.getElementById('mainGame');
+
+function formatKRW(n){return '₩'+Number(Math.round(n)).toLocaleString('ko-KR');}
+function log(s){const t=new Date().toLocaleTimeString('ko-KR',{hour12:false});logBox.insertAdjacentHTML('afterbegin',`<div class="text-xs text-slate-400">[${t}] ${s}</div>`);}
+function showModal(el){el.classList.remove('hidden');}
+function hideModal(el){el.classList.add('hidden');}
+
+nickConfirm.addEventListener('click',()=>{
+  nickname=nicknameInput.value.trim()||'익명';
+  nicknameText.textContent=nickname;
+  nicknameModal.classList.add('hidden');
+  mainGame.classList.remove('hidden');
+  log(`환영합니다, ${nickname}님. 초기 금액 ${formatKRW(balance)}로 시작합니다.`);
+});
+
+spinBtn.addEventListener('click',()=>{
+  confirmText.textContent=`현재 가진 금액 ${formatKRW(balance)}으로 룰렛을 돌리시겠습니까?`;
+  showModal(confirmModal);
+});
+confirmCancel.addEventListener('click',()=>hideModal(confirmModal));
+confirmOk.addEventListener('click',()=>{hideModal(confirmModal);performSpin();});
+resultCancel.addEventListener('click',()=>{hideModal(resultModal);});
+resultContinue.addEventListener('click',()=>{hideModal(resultModal);showModal(confirmModal);});
+brokeOk.addEventListener('click',()=>location.reload());
+
+// 🎞️ 개선된 룰렛 애니메이션
+function animateReels(symbols){
+  return new Promise(resolve=>{
+    strips.forEach((strip,i)=>{
+      let count=0;
+      let speed=50; // 빠르게 시작
+      const spinInterval=setInterval(()=>{
+        strip.textContent=SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)];
+        count++;
+        if(count>20) speed+=40; // 점점 느려짐
+        if(count>35){
+          clearInterval(spinInterval);
+          strip.textContent=symbols[i];
+          if(i===2) setTimeout(resolve,1000); // 1초 후 결과 표시
+        }
+      },speed);
+    });
+  });
+}
+
+function chooseReelSymbolsForOutcome(o){
+  if(o==='JACKPOT'){const s=SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)];return [s,s,s];}
+  if(o==='SMALL'){const s1=SYMBOLS[Math.floor(Math.random()*SYMBOLS.length)],s2=s1,s3=SYMBOLS.find(x=>x!==s1);return [s1,s2,s3];}
+  const arr=[...SYMBOLS].sort(()=>Math.random()-0.5);return arr.slice(0,3);
+}
+function getProbOutcome(){
+  let r=Math.random();
+  if(r<0.3 && consecutiveSmall<2){return 'SMALL';}
+  if(consecutiveLoss>=3){return 'SMALL';}
+  return 'LOSS';
+}
+
+async function performSpin(){
+  const stake=balance;
+  log(`스핀 시작: 스테이크 ${formatKRW(stake)}`);
+  const outcome=(spinCount<scriptedSequence.length)?scriptedSequence[spinCount]:getProbOutcome();
+  const symbols=chooseReelSymbolsForOutcome(outcome);
+  await animateReels(symbols);
+
+  let newBal=balance,winAmt=0;
+  if(outcome==='JACKPOT'){newBal=stake*3;winAmt=newBal-stake;consecutiveSmall=0;consecutiveLoss=0;}
+  else if(outcome==='SMALL'){newBal=Math.round(stake*1.1);winAmt=newBal-stake;consecutiveSmall++;consecutiveLoss=0;}
+  else{newBal=Math.round(stake*0.5);winAmt=newBal-stake;consecutiveLoss++;consecutiveSmall=0;}
+  balance=newBal;balanceDisplay.textContent=formatKRW(balance);spinCount++;
+
+  if(outcome==='JACKPOT'){
+    resultTitle.textContent='잭팟!';
+    resultText.innerHTML=`세 칸 다 일치!<br>현재 잔액: <strong>${formatKRW(newBal)}</strong>`;
+  }else if(outcome==='SMALL'){
+    resultTitle.textContent='소액 승리';
+    resultText.innerHTML=`두 칸이 일치했습니다.<br>현재 잔액: <strong>${formatKRW(newBal)}</strong>`;
+  }else{
+    resultTitle.textContent='실패';
+    resultText.innerHTML=`금액의 50%를 잃었습니다.<br>현재 잔액: <strong>${formatKRW(newBal)}</strong>`;
+  }
+
+  showModal(resultModal);
+
+  if(balance<50000){
+    hideModal(resultModal);
+    showModal(brokeModal);
+    log('파산 발생: 게임 종료');
+  }
+}
+</script>
+</body>
+</html>
